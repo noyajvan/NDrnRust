@@ -10,6 +10,7 @@ env:
   CARGO_TERM_COLOR: always
   ESP_IDF_VERSION: v5.1
   ESP_IDF_TARGET: xtensa-esp32s3-espidf
+  ESP_HAL_TARGET: xtensa-esp32s3-none-elf
 
 jobs:
   build:
@@ -35,7 +36,9 @@ jobs:
     - name: Install Rust
       uses: dtolnay/rust-toolchain@stable
       with:
-        targets: ${{ env.ESP_IDF_TARGET }}
+        targets: |
+          ${{ env.ESP_IDF_TARGET }}
+          ${{ env.ESP_HAL_TARGET }}
 
     - name: Install espup
       run: |
@@ -48,6 +51,10 @@ jobs:
         echo "IDF_PATH=$IDF_PATH" >> $GITHUB_ENV
         echo "IDF_TOOLS_PATH=$IDF_TOOLS_PATH" >> $GITHUB_ENV
 
+    - name: Check with esp-hal target
+      run: |
+        cargo check --target ${{ env.ESP_HAL_TARGET }}
+
     - name: Build
       run: |
         . $HOME/export-esp.sh
@@ -58,16 +65,9 @@ jobs:
         . $HOME/export-esp.sh
         cargo test --release
 
-    - name: Convert to binary
-      run: |
-        . $HOME/export-esp.sh
-        espflash save-image --chip esp32s3 target/xtensa-esp32s3-espidf/release/dropctrl-v3 target/dropctrl-v3.bin
-
     - name: Upload artifact (main branch only)
       if: github.ref == 'refs/heads/main'
       uses: actions/upload-artifact@v4
       with:
         name: firmware
-        path: |
-          target/xtensa-esp32s3-espidf/release/dropctrl-v3
-          target/dropctrl-v3.bin
+        path: target/xtensa-esp32s3-espidf/release/dropctrl-v3
