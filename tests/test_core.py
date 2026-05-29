@@ -1,7 +1,7 @@
 """Tests for calculator.core."""
 
 import pytest
-from calculator.core import add, subtract, multiply, divide
+from calculator.core import add, subtract, multiply, divide, power
 
 
 class TestAdd:
