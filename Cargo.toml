@@ -4,3 +4,25 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+[package]
+name = "esp32-s3-tailscale-bridge"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+esp-idf-svc = "0.48"
+esp-idf-hal = "0.43"
+embedded-svc = "0.27"
+log = "0.4"
+mavlink = "0.12"
+ws2812-esp32-rmt-driver = "0.5"
+smart-leds = "0.4"
+heapless = "0.8"
+nb = "1"
+embedded-hal = "1.0"
+esp-idf-sys = { version = "0.34", features = ["binstart"] }
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
