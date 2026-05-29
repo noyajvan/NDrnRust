@@ -1,0 +1,73 @@
+name: Build ESP32-S3
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  CARGO_TERM_COLOR: always
+  ESP_IDF_VERSION: v5.1
+  ESP_IDF_TARGET: xtensa-esp32s3-espidf
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libudev-dev pkg-config
+
+    - name: Cache Rust dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: ${{ env.ESP_IDF_TARGET }}
+
+    - name: Install espup
+      run: |
+        cargo install espup
+        espup install --targets ${{ env.ESP_IDF_TARGET }} --export-file $HOME/export-esp.sh
+
+    - name: Source ESP-IDF environment
+      run: |
+        . $HOME/export-esp.sh
+        echo "IDF_PATH=$IDF_PATH" >> $GITHUB_ENV
+        echo "IDF_TOOLS_PATH=$IDF_TOOLS_PATH" >> $GITHUB_ENV
+
+    - name: Build
+      run: |
+        . $HOME/export-esp.sh
+        cargo build --release
+
+    - name: Run tests
+      run: |
+        . $HOME/export-esp.sh
+        cargo test --release
+
+    - name: Convert to binary
+      run: |
+        . $HOME/export-esp.sh
+        espflash save-image --chip esp32s3 target/xtensa-esp32s3-espidf/release/dropctrl-v3 target/dropctrl-v3.bin
+
+    - name: Upload artifact (main branch only)
+      if: github.ref == 'refs/heads/main'
+      uses: actions/upload-artifact@v4
+      with:
+        name: firmware
+        path: |
+          target/xtensa-esp32s3-espidf/release/dropctrl-v3
+          target/dropctrl-v3.bin
