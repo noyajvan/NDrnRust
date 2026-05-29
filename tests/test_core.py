@@ -47,3 +47,17 @@ class TestDivide:
     def test_division_by_zero(self) -> None:
         with pytest.raises(ZeroDivisionError):
             divide(1, 0)
+
+
+class TestPower:
+    def test_positive(self) -> None:
+        assert power(2, 3) == 8
+
+    def test_zero_exponent(self) -> None:
+        assert power(5, 0) == 1
+
+    def test_negative_exponent(self) -> None:
+        assert power(2, -1) == 0.5
+
+    def test_float_exponent(self) -> None:
+        assert power(4, 0.5) == 2.0

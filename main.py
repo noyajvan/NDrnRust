@@ -1,6 +1,6 @@
 """Simple CLI demo for the calculator package."""
 
-from calculator.core import add, subtract, multiply, divide
+from calculator.core import add, subtract, multiply, divide, power
 
 
 def main() -> None:
@@ -10,6 +10,7 @@ def main() -> None:
     print(f"{a} - {b} = {subtract(a, b)}")
     print(f"{a} * {b} = {multiply(a, b)}")
     print(f"{a} / {b} = {divide(a, b):.4f}")
+    print(f"{a} ** {b} = {power(a, b)}")
 
 
 if __name__ == "__main__":
