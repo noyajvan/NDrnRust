@@ -16,8 +16,7 @@ jobs:
 
       - name: Install toolchain and build
         run: |
-          curl -sL -o espup.tar.gz https://github.com/esp-rs/espup/releases/download/v0.17.1/espup-x86_64-unknown-linux-gnu.tar.gz
-          tar -xzf espup.tar.gz
+          curl -sL -o espup https://github.com/esp-rs/espup/releases/download/v0.17.1/espup-x86_64-unknown-linux-gnu
           chmod +x espup
           ./espup install -t esp32s3 -f export-esp.sh
           . export-esp.sh
