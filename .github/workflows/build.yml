@@ -11,13 +11,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Update rustup
+        run: rustup self update
+
       - name: Setup Xtensa toolchain
         uses: esp-rs/xtensa-toolchain@v1
-        with:
-          default: true
 
-      - name: Add target
-        run: rustup target add xtensa-esp32s3-none-elf
+      - name: Install espflash
+        run: cargo install espflash
 
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2
