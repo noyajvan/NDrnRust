@@ -3,7 +3,6 @@ runner = "espflash flash --monitor"
 
 [build]
 target = "xtensa-esp32s3-none-elf"
-rustflags = ["--cfg", "espidf_time64"]
 
 [env]
-ESP_IDF_SDKCONFIG = "sdkconfig.defaults"
+ESP_HAL_CONFIG_ESP32S3_CPU_FREQUENCY = "240M"

@@ -1,4 +1,3 @@
 fn main() {
-    embuild::espidf::sys::linkup();
-    embuild::build::link_stdcpp();
+    println!("cargo:rustc-link-arg-bins=-Tlinkall.x");
 }
