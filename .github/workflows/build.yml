@@ -8,22 +8,13 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    container:
+      image: espressif/idf-rust:esp32s3_latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Rust
-        run: rustup update stable && rustup default stable
-
-      - name: Install Xtensa via espup binary
-        run: |
-          wget -q https://github.com/esp-rs/espup/releases/download/v0.17.1/espup-x86_64-unknown-linux-gnu.tar.gz
-          tar -xzf espup-x86_64-unknown-linux-gnu.tar.gz
-          ./espup install -t esp32s3 -f
-
       - name: Build
-        run: |
-          . ~/export-esp.sh
-          cargo build --release
+        run: cargo build --release
 
       - name: Upload
         uses: actions/upload-artifact@v4
