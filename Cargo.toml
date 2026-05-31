@@ -9,7 +9,6 @@ esp-println = { version = "0.13", features = ["esp32s3", "jtag-serial"] }
 esp-backtrace = { version = "0.15", features = ["esp32s3", "panic-handler", "exception-handler"] }
 esp-alloc = "0.6"
 heapless = "0.8"
-log = "0.4"
 nb = "1"
 embedded-hal = "1.0"
 
