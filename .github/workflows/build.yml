@@ -14,7 +14,10 @@ jobs:
       - name: Setup Xtensa toolchain
         uses: esp-rs/xtensa-toolchain@v1
         with:
-          target: esp32s3
+          default: true
+
+      - name: Add target
+        run: rustup target add xtensa-esp32s3-none-elf
 
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2
