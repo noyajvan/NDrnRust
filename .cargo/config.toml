@@ -1,0 +1,9 @@
+﻿[target.xtensa-esp32s3-none-elf]
+runner = "espflash flash --monitor"
+
+[build]
+target = "xtensa-esp32s3-none-elf"
+rustflags = ["--cfg", "espidf_time64"]
+
+[env]
+ESP_IDF_SDKCONFIG = "sdkconfig.defaults"

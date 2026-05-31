@@ -1,0 +1,15 @@
+# Environment variables (sensitive keys)
+.env
+
+# Aider files
+.aider*
+
+# Rust build artifacts
+target/
+Cargo.lock
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
