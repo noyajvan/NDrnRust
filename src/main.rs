@@ -24,7 +24,6 @@ esp_bootloader_esp_idf::esp_app_desc!();
 
 const SYS_ID: u8 = 1;
 const COMP_ID: u8 = 0;
-const TAKEOFF_MODE: u32 = 13;
 
 // ─── MAVLink V2 парсер ─────────────────────────────────────────────────────
 struct MavParser {
@@ -69,32 +68,34 @@ impl MavParser {
     }
 }
 
-// ─── MAVLink helpers ──────────────────────────────────────────────────────
-fn make_heartbeat() -> [u8; 21] {
+// ─── MAVLink builders ──────────────────────────────────────────────────────
+fn make_heartbeat(seq: u8) -> [u8; 21] {
     let mut buf = [0u8; 21];
-    buf[0] = 0xFD; buf[1] = 9; buf[4] = 0; buf[5] = 0;
+    buf[0] = 0xFD; buf[1] = 9; buf[4] = seq; buf[5] = 0;
     buf[8] = SYS_ID; buf[9] = COMP_ID;
     buf[10] = 9;  // MAV_TYPE_ONBOARD_CONTROLLER
     buf[18] = 3;  // mavlink_version
-    buf[19] = 0x55; buf[20] = 0xAA;
     buf
 }
 
 fn make_command_long(command: u16, param1: f32, param2: f32) -> [u8; 37] {
     let mut buf = [0u8; 37];
-    buf[0] = 0xFD; buf[1] = 20; buf[5] = 76; // msgid COMMAND_LONG
-    buf[6] = 0; buf[7] = 0;
+    buf[0] = 0xFD; buf[1] = 20; buf[5] = 76; buf[6] = 0; buf[7] = 0;
     buf[8] = SYS_ID; buf[9] = COMP_ID;
-    buf[10] = 1; buf[11] = 1; // target
+    buf[10] = 1; buf[11] = 1;
     buf[12] = command as u8; buf[13] = (command >> 8) as u8;
     let p1 = param1.to_le_bytes(); buf[15..19].copy_from_slice(&p1);
     let p2 = param2.to_le_bytes(); buf[19..23].copy_from_slice(&p2);
-    buf[35] = 0x55; buf[36] = 0xAA;
     buf
 }
 
 fn make_set_relay() -> [u8; 37] { make_command_long(189, 0.0, 1.0) }
 fn make_disarm() -> [u8; 37] { make_command_long(400, 0.0, 21196.0) }
+
+// ─── Відправка по UART ────────────────────────────────────────────────────
+fn uart_write(uart: &mut Uart, data: &[u8]) {
+    let _ = uart.write_bytes(data);
+}
 
 // ─── Crash detection ──────────────────────────────────────────────────────
 struct CrashDetect {
@@ -122,14 +123,6 @@ impl CrashDetect {
     }
 }
 
-// ─── Відправка по UART ────────────────────────────────────────────────────
-fn uart_write_bytes(uart: &mut impl embedded_hal_nb::serial::Write<u8>, data: &[u8]) {
-    use embedded_hal_nb::serial::Write;
-    for &b in data {
-        let _ = nb::block!(uart.write(b));
-    }
-}
-
 #[main]
 fn main() -> ! {
     let config = esp_hal::Config::default().with_cpu_clock(CpuClock::max());
@@ -138,8 +131,7 @@ fn main() -> ! {
     let mut led = Output::new(peripherals.GPIO15, Level::Low, OutputConfig::default());
     let boot_btn = Input::new(peripherals.GPIO0, InputConfig::default().with_pull(Pull::Up));
 
-    let uart_config = esp_hal::uart::Config::default()
-        .with_baudrate(115200);
+    let uart_config = esp_hal::uart::Config::default().with_baudrate(115200);
     let mut fc_uart = Uart::new(peripherals.UART0, uart_config)
         .unwrap()
         .with_tx(peripherals.GPIO43)
@@ -154,7 +146,7 @@ fn main() -> ! {
     let mut hb_seq: u8 = 0;
     let mut last_hb_time = Instant::now();
 
-    use embedded_hal_nb::serial::Read;
+    let mut rx_buf = [0u8; 64];
 
     let mut counter: u32 = 0;
 
@@ -163,77 +155,67 @@ fn main() -> ! {
         let now = Instant::now();
 
         // ─── Прийом UART ─────
-        loop {
-            match nb::block!(fc_uart.read()) {
-                Ok(byte) => {
-                    if let Some(pkt) = parser.parse(byte) {
-                        match pkt.msgid {
-                            0 => { // HEARTBEAT
-                                hb_received = true;
-                                let base_mode = pkt.payload[4];
-                                is_armed = (base_mode & 0x80) != 0;
-                                if last_armed && !is_armed && !crash.emergency && crash.was_flying {
-                                    crash.emergency = true;
-                                    uart_write_bytes(&mut fc_uart, &make_disarm());
-                                    if crash.relay_after_land {
-                                        uart_write_bytes(&mut fc_uart, &make_set_relay());
-                                    }
-                                }
-                                last_armed = is_armed;
-                                if is_armed { crash.was_flying = true; }
-                            }
-                            74 => { // VFR_HUD
-                                let alt = f32::from_le_bytes([
-                                    pkt.payload[0], pkt.payload[1], pkt.payload[2], pkt.payload[3]
-                                ]);
-                                crash.throttle = (pkt.payload[8] as u16) | (pkt.payload[9] as u16) << 8;
-                                crash.ground_speed = f32::from_le_bytes([
-                                    pkt.payload[16], pkt.payload[17], pkt.payload[18], pkt.payload[19]
-                                ]);
-                                if !crash.emergency && crash.was_flying && is_armed {
-                                    if crash.ground_speed < 0.15 && crash.throttle > 45 {
-                                        let dt = now - crash.stuck_timer;
-                                        if dt > Duration::from_millis(3000) {
-                                            crash.emergency = true;
-                                            crash.failsafe_pending = true;
-                                            crash.failsafe_step = 0;
-                                            crash.failsafe_time = now;
-                                            uart_write_bytes(&mut fc_uart, &make_disarm());
-                                        }
-                                    } else {
-                                        crash.stuck_timer = now;
-                                    }
+        if let Ok(n) = fc_uart.read(&mut rx_buf) {
+            for &byte in &rx_buf[..n] {
+                if let Some(pkt) = parser.parse(byte) {
+                    match pkt.msgid {
+                        0 => { // HEARTBEAT
+                            hb_received = true;
+                            let base_mode = pkt.payload[4];
+                            is_armed = (base_mode & 0x80) != 0;
+                            if last_armed && !is_armed && !crash.emergency && crash.was_flying {
+                                crash.emergency = true;
+                                uart_write(&mut fc_uart, &make_disarm());
+                                if crash.relay_after_land {
+                                    uart_write(&mut fc_uart, &make_set_relay());
                                 }
                             }
-                            27 => { // RAW_IMU
-                                let xgyro = i16::from_le_bytes([pkt.payload[12], pkt.payload[13]]);
-                                let ygyro = i16::from_le_bytes([pkt.payload[14], pkt.payload[15]]);
-                                if !crash.emergency && crash.was_flying && is_armed {
-                                    if xgyro.abs() > 4500 || ygyro.abs() > 4500 {
-                                        let dt = now - crash.gyro_timer;
-                                        if dt > Duration::from_millis(150) {
-                                            crash.emergency = true;
-                                        }
-                                    } else {
-                                        crash.gyro_timer = now;
-                                    }
-                                }
-                            }
-                            _ => {}
+                            last_armed = is_armed;
+                            if is_armed { crash.was_flying = true; }
                         }
+                        74 => { // VFR_HUD
+                            crash.throttle = (pkt.payload[8] as u16) | (pkt.payload[9] as u16) << 8;
+                            crash.ground_speed = f32::from_le_bytes([
+                                pkt.payload[16], pkt.payload[17], pkt.payload[18], pkt.payload[19]
+                            ]);
+                            if !crash.emergency && crash.was_flying && is_armed {
+                                if crash.ground_speed < 0.15 && crash.throttle > 45 {
+                                    if (now - crash.stuck_timer) > Duration::from_millis(3000) {
+                                        crash.emergency = true;
+                                        crash.failsafe_pending = true;
+                                        crash.failsafe_step = 0;
+                                        crash.failsafe_time = now;
+                                        uart_write(&mut fc_uart, &make_disarm());
+                                    }
+                                } else {
+                                    crash.stuck_timer = now;
+                                }
+                            }
+                        }
+                        27 => { // RAW_IMU
+                            let xgyro = i16::from_le_bytes([pkt.payload[12], pkt.payload[13]]);
+                            let ygyro = i16::from_le_bytes([pkt.payload[14], pkt.payload[15]]);
+                            if !crash.emergency && crash.was_flying && is_armed {
+                                if xgyro.abs() > 4500 || ygyro.abs() > 4500 {
+                                    if (now - crash.gyro_timer) > Duration::from_millis(150) {
+                                        crash.emergency = true;
+                                    }
+                                } else {
+                                    crash.gyro_timer = now;
+                                }
+                            }
+                        }
+                        _ => {}
                     }
                 }
-                Err(nb::Error::WouldBlock) => break,
-                Err(_) => break,
             }
         }
 
         // ─── Heartbeat ─────
         if now - last_hb_time > Duration::from_millis(1000) {
-            let mut hb = make_heartbeat();
-            hb[4] = hb_seq;
+            let hb = make_heartbeat(hb_seq);
             hb_seq = hb_seq.wrapping_add(1);
-            uart_write_bytes(&mut fc_uart, &hb);
+            uart_write(&mut fc_uart, &hb);
             last_hb_time = now;
         }
 
@@ -241,12 +223,12 @@ fn main() -> ! {
         if crash.failsafe_pending {
             let ft = now - crash.failsafe_time;
             if crash.failsafe_step == 0 {
-                uart_write_bytes(&mut fc_uart, &make_disarm());
+                uart_write(&mut fc_uart, &make_disarm());
                 crash.failsafe_step = 1;
                 crash.failsafe_time = now;
             } else if crash.failsafe_step == 1 && ft > Duration::from_millis(25) {
                 if crash.relay_after_land {
-                    uart_write_bytes(&mut fc_uart, &make_set_relay());
+                    uart_write(&mut fc_uart, &make_set_relay());
                 }
                 crash.failsafe_step = 2;
                 crash.failsafe_time = now;
