@@ -11,11 +11,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Xtensa toolchain
+        uses: esp-rs/xtensa-toolchain@v1
+
       - name: Build
         run: |
-          docker run --rm -v $PWD:/workspace -w /workspace \
-            espressif/idf-rust:esp32s3_latest \
-            /bin/bash -c "cargo build --release"
+          cargo build --release
 
       - name: Upload
         uses: actions/upload-artifact@v4
