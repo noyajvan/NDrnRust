@@ -16,15 +16,12 @@ jobs:
           curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
           source "$HOME/.cargo/env"
 
-      - name: Install espup
-        run: cargo install espup --locked
-
-      - name: Install Xtensa toolchain
-        run: espup install -t esp32s3 -f
-
-      - name: Source and build
+      - name: Install Xtensa toolchain and build
         run: |
-          source ~/export-esp.sh
+          curl -sL https://github.com/esp-rs/espup/releases/download/v0.17.1/espup-x86_64-unknown-linux-gnu.tar.gz -o espup.tar.gz
+          tar -xzf espup.tar.gz
+          ./espup install -t esp32s3 -f -l /tmp/export-esp.sh
+          source /tmp/export-esp.sh
           cargo build --release
 
       - name: Upload firmware
