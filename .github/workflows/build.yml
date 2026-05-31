@@ -8,16 +8,23 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    container:
-      image: ghcr.io/esp-rs/xtensa-toolchain:v1
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install cargo dependencies
-        run: cargo install espflash
+      - name: Install binstall
+        run: curl -LO https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-x86_64-unknown-linux-gnu.tgz && tar -xzf cargo-binstall-x86_64-unknown-linux-gnu.tgz -C ~/.cargo/bin
 
-      - name: Add Xtensa target
-        run: rustup target add xtensa-esp32s3-none-elf
+      - name: Install espup (binary, no compile)
+        run: cargo binstall espup -y
+
+      - name: Install Xtensa toolchain
+        run: espup install -t xtensa-esp32s3-none-elf -f
+
+      - name: Add target
+        run: rustup target add xtensa-esp32s3-none-elf --toolchain esp
+
+      - name: Install espflash
+        run: cargo binstall espflash -y
 
       - name: Build release
         run: cargo build --release
