@@ -8,13 +8,14 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    container:
-      image: espressif/idf-rust:esp32s3_latest
     steps:
       - uses: actions/checkout@v4
 
       - name: Build
-        run: cargo build --release
+        run: |
+          docker run --rm -v $PWD:/workspace -w /workspace \
+            espressif/idf-rust:esp32s3_latest \
+            /bin/bash -c "cargo build --release"
 
       - name: Upload
         uses: actions/upload-artifact@v4
