@@ -5,17 +5,13 @@ edition = "2021"
 
 [dependencies]
 esp-hal = "0.23"
-esp-println = { version = "0.13", features = ["jtag-serial"] }
+esp-println = { version = "0.13", default-features = false, features = ["jtag-serial"] }
 esp-backtrace = { version = "0.15", features = ["esp32s3", "panic-handler", "exception-handler"] }
-esp-alloc = { version = "0.6", features = ["esp32s3"] }
-esp-wifi = { version = "0.10", features = ["esp32s3", "wifi-default", "tcp", "utils"] }
-smoltcp = "0.11"
-
+esp-alloc = "0.6"
 heapless = "0.8"
 log = "0.4"
 nb = "1"
 embedded-hal = "1.0"
-smart-leds = "0.4"
 
 [profile.release]
 opt-level = "z"
