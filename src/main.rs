@@ -93,7 +93,7 @@ fn make_set_relay() -> [u8; 37] { make_command_long(189, 0.0, 1.0) }
 fn make_disarm() -> [u8; 37] { make_command_long(400, 0.0, 21196.0) }
 
 // ─── Відправка по UART ────────────────────────────────────────────────────
-fn uart_write(uart: &mut Uart, data: &[u8]) {
+fn uart_write(uart: &mut impl esp_hal::uart::Write, data: &[u8]) {
     let _ = uart.write_bytes(data);
 }
 
