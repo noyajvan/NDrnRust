@@ -8,31 +8,19 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/esp-rs/xtensa-toolchain:v1
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install espup
-        run: cargo install espup --locked
+      - name: Install cargo dependencies
+        run: cargo install espflash
 
-      - name: Install Xtensa toolchain
-        run: espup install -t xtensa-esp32s3-none-elf -f -l /tmp/export-esp.sh
-
-      - name: Source ESP-IDF
-        run: |
-          . /tmp/export-esp.sh
-          echo "IDF_PATH=$IDF_PATH" >> $GITHUB_ENV
-          echo "IDF_TOOLS_PATH=$IDF_TOOLS_PATH" >> $GITHUB_ENV
-
-      - name: Install espflash
-        run: cargo install espflash --locked
-
-      - name: Cache dependencies
-        uses: Swatinem/rust-cache@v2
+      - name: Add Xtensa target
+        run: rustup target add xtensa-esp32s3-none-elf
 
       - name: Build release
-        run: |
-          . /tmp/export-esp.sh
-          cargo build --release
+        run: cargo build --release
 
       - name: Upload firmware
         uses: actions/upload-artifact@v4
