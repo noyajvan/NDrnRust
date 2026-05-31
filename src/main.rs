@@ -17,7 +17,7 @@ const COMP_ID: u8 = 0;
 
 // ─── Макрос для UART write ────────────────────────────────────────────────
 macro_rules! uart_write {
-    ($uart:expr, $data:expr) => { let _ = ($uart).write_bytes($data); };
+    ($uart:expr, $data:expr) => { let _ = ($uart).write($data); };
 }
 
 // ─── MAVLink V2 parser ────────────────────────────────────────────────────
