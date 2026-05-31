@@ -11,17 +11,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Rust
+      - name: Install Rust + toolchain + build
         run: |
+          export PATH="$HOME/.cargo/bin:$PATH"
           curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-          source "$HOME/.cargo/env"
-
-      - name: Install Xtensa toolchain and build
-        run: |
+          . "$HOME/.cargo/env"
           curl -sL https://github.com/esp-rs/espup/releases/download/v0.17.1/espup-x86_64-unknown-linux-gnu.tar.gz -o espup.tar.gz
           tar -xzf espup.tar.gz
           ./espup install -t esp32s3 -f -l /tmp/export-esp.sh
-          source /tmp/export-esp.sh
+          . /tmp/export-esp.sh
           cargo build --release
 
       - name: Upload firmware
