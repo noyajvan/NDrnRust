@@ -7,5 +7,4 @@ runner = "espflash flash --monitor"
 [build]
 target = "xtensa-esp32s3-none-elf"
 
-[env]
-ESP_HAL_CONFIG_ESP32S3_CPU_FREQUENCY = "240M"
+# No custom env vars needed
