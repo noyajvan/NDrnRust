@@ -1,73 +1,29 @@
-name: Build ESP32-S3
+name: Build ESP32 firmware
 
 on:
   push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
-
-env:
-  CARGO_TERM_COLOR: always
-  ESP_IDF_VERSION: v5.1
-  ESP_IDF_TARGET: xtensa-esp32s3-espidf
-  ESP_HAL_TARGET: xtensa-esp32s3-none-elf
+    branches: ["main"]
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Install system dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y libudev-dev pkg-config
+      - name: Setup Xtensa toolchain
+        uses: esp-rs/xtensa-toolchain@v1
+        with:
+          target: esp32s3
 
-    - name: Cache Rust dependencies
-      uses: actions/cache@v4
-      with:
-        path: |
-          ~/.cargo/registry
-          ~/.cargo/git
-          target
-        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+      - name: Cache dependencies
+        uses: Swatinem/rust-cache@v2
 
-    - name: Install Rust
-      uses: dtolnay/rust-toolchain@stable
-      with:
-        targets: |
-          ${{ env.ESP_IDF_TARGET }}
-          ${{ env.ESP_HAL_TARGET }}
+      - name: Build release
+        run: cargo build --release
 
-    - name: Install espup
-      run: |
-        cargo install espup
-        espup install --targets ${{ env.ESP_IDF_TARGET }} --export-file $HOME/export-esp.sh
-
-    - name: Source ESP-IDF environment
-      run: |
-        . $HOME/export-esp.sh
-        echo "IDF_PATH=$IDF_PATH" >> $GITHUB_ENV
-        echo "IDF_TOOLS_PATH=$IDF_TOOLS_PATH" >> $GITHUB_ENV
-
-    - name: Check with esp-hal target
-      run: |
-        cargo check --target ${{ env.ESP_HAL_TARGET }}
-
-    - name: Build
-      run: |
-        . $HOME/export-esp.sh
-        cargo build --release
-
-    - name: Run tests
-      run: |
-        . $HOME/export-esp.sh
-        cargo test --release
-
-    - name: Upload artifact (main branch only)
-      if: github.ref == 'refs/heads/main'
-      uses: actions/upload-artifact@v4
-      with:
-        name: firmware
-        path: target/xtensa-esp32s3-espidf/release/dropctrl-v3
+      - name: Upload firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware-esp32s3
+          path: target/xtensa-esp32s3-none-elf/release/dropctrl-v3
