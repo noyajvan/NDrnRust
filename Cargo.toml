@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-esp-hal = "0.23"
+esp-hal = { version = "0.23", features = ["esp32s3"] }
 esp-println = { version = "0.13", default-features = false, features = ["jtag-serial"] }
 esp-backtrace = { version = "0.15", features = ["esp32s3", "panic-handler", "exception-handler"] }
 esp-alloc = "0.6"
