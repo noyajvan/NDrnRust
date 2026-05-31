@@ -1,12 +1,9 @@
-name: Build ESP32 firmware
+name: Build firmware
 
 on:
   push:
     branches: ["main"]
   workflow_dispatch:
-
-env:
-  CARGO_TERM_COLOR: always
 
 jobs:
   build:
@@ -14,26 +11,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install system deps
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq libudev-dev pkg-config
-
-      - name: Cache Cargo + Espressif
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            ~/.espressif
-          key: ${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
-
-      - name: Install toolchain
+      - name: Install Rust
         run: |
-          cargo install espup --locked || true
-          espup install -t xtensa-esp32s3-none-elf -f || true
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+          source "$HOME/.cargo/env"
 
-      - name: Build
+      - name: Install espup
+        run: cargo install espup --locked
+
+      - name: Install Xtensa toolchain
+        run: espup install -t esp32s3 -f
+
+      - name: Source and build
         run: |
-          source ~/export-esp.sh 2>/dev/null || true
+          source ~/export-esp.sh
           cargo build --release
 
       - name: Upload firmware
@@ -41,4 +32,3 @@ jobs:
         with:
           name: firmware-esp32s3
           path: target/xtensa-esp32s3-none-elf/release/dropctrl-v3
-          retention-days: 7
