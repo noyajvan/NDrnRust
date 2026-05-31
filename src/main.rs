@@ -1,164 +1,110 @@
 //! ESP32-S3 DropCtrlV3 — no_std Mavlink Bridge
 //!
 //! Піни:
-//!   - WS2812 LED:  GPIO 48
-//!   - FC UART TX:   GPIO 43
-//!   - FC UART RX:   GPIO 44
-//!   - BOOT button:  GPIO 0
+//!   - FC UART TX: GPIO 43
+//!   - FC UART RX: GPIO 44
+//!   - BOOT button: GPIO 0
+//!   - Signal LED:  GPIO 15
 
 #![no_std]
 #![no_main]
 
-extern crate alloc;
+use esp_hal::clock::CpuClock;
+use esp_hal::gpio::{Input, Level, Output, Pull};
+use esp_hal::main;
+use esp_hal::time::{Duration, Instant};
+use esp_hal::uart::Uart;
 
-use esp_alloc as _;
-use esp_backtrace as _;
-use esp_hal::{
-    clock::ClockControl,
-    delay::Delay,
-    gpio::{Input, Io, Level, Output, Pull},
-    peripherals::Peripherals,
-    prelude::*,
-    system::SystemControl,
-    uart::Uart,
-};
-use esp_println::println;
-
-// ─── MAVLink парсер ───────────────────────────────────────────────────────
-mod mavlink {
-    const MAGIC_V2: u8 = 0xFD;
-
-    pub struct Parser {
-        buf: [u8; 280],
-        pos: usize,
-        framing: bool,
-        len: usize,
-        msgid: u32,
-        payload: [u8; 255],
-    }
-
-    impl Parser {
-        pub fn new() -> Self {
-            Self {
-                buf: [0; 280],
-                pos: 0,
-                framing: false,
-                len: 0,
-                msgid: 0,
-                payload: [0; 255],
-            }
-        }
-
-        pub fn parse_byte(&mut self, byte: u8) -> bool {
-            if !self.framing {
-                if byte == MAGIC_V2 {
-                    self.framing = true;
-                    self.pos = 0;
-                }
-                self.buf[0] = byte;
-                self.pos = 1;
-                return false;
-            }
-            if self.pos < self.buf.len() {
-                self.buf[self.pos] = byte;
-            }
-            self.pos += 1;
-            if self.pos >= 10 && self.buf[0] == MAGIC_V2 {
-                self.len = self.buf[1] as usize;
-                if self.pos >= self.len + 12 {
-                    self.framing = false;
-                    self.msgid = self.buf[5] as u32
-                        | (self.buf[6] as u32) << 8
-                        | (self.buf[7] as u32) << 16;
-                    for i in 0..self.len.min(255) {
-                        self.payload[i] = self.buf[10 + i];
-                    }
-                    return true;
-                }
-            }
-            false
-        }
-
-        pub fn msgid(&self) -> u32 { self.msgid }
-    }
+#[panic_handler]
+fn panic(_: &core::panic::PanicInfo) -> ! {
+    loop {}
 }
 
-// ─── Головна функція ──────────────────────────────────────────────────────
-#[entry]
+esp_bootloader_esp_idf::esp_app_desc!();
+
+#[main]
 fn main() -> ! {
-    let peripherals = Peripherals::take();
-    let system = SystemControl::new(peripherals.SYSTEM);
-    let clocks = ClockControl::max(system.clock_control).freeze();
+    let config = esp_hal::Config::default().with_cpu_clock(CpuClock::max());
+    let peripherals = esp_hal::init(config);
 
-    init_heap();
+    // LED на GPIO 15
+    let mut led = Output::new(peripherals.GPIO15, Level::Low);
 
-    let delay = Delay::new(&clocks);
+    // Кнопка BOOT (GPIO 0, підтяжка вгору)
+    let boot_btn = Input::new(peripherals.GPIO0, Pull::Up);
 
-    let io = Io::new(peripherals.GPIO, peripherals.IO_MUX);
+    // UART для зв'язку з польотним контролером (FC)
+    let uart_config = esp_hal::uart::Config::default()
+        .with_baudrate(115200)
+        .with_data_bits(esp_hal::uart::DataBits::DataBits8)
+        .with_stop_bits(esp_hal::uart::StopBits::STOP1)
+        .with_parity(esp_hal::uart::Parity::ParityNone);
+    let mut fc_uart = Uart::new(peripherals.UART0, uart_config)
+        .unwrap()
+        .with_tx(peripherals.GPIO43)
+        .with_rx(peripherals.GPIO44);
 
-    let boot_btn = Input::new(io.pins.gpio0, Pull::Up);
-    let mut led = Output::new(io.pins.gpio15, Level::Low);
+    // Буфер для прийому
+    let mut rx_buf = [0u8; 64];
 
-    // UART для FC (GPIO 43 TX, GPIO 44 RX)
-    let mut fc_uart = Uart::new(
-        peripherals.UART0,
-        esp_hal::uart::Config::default(),
-        (io.pins.gpio43, io.pins.gpio44),
-        &clocks,
-    )
-    .unwrap();
+    // Мінімальний парсер MAVLink V2
+    let mut mav_pos: usize = 0;
+    let mut mav_framing = false;
+    let mut mav_buf = [0u8; 280];
 
-    esp_println::init();
-
-    let mut parser = mavlink::Parser::new();
     let mut counter: u32 = 0;
-
-    println!("╔══════════════════════════════╗");
-    println!("║ DropCtrlV3  (ESP32-S3 no_std)║");
-    println!("╚══════════════════════════════╝");
 
     loop {
         counter = counter.wrapping_add(1);
 
-        // Читання UART
-        let mut buf = [0u8; 64];
-        if let Ok(n) = fc_uart.read(&mut buf) {
-            if n > 0 {
-                for &b in &buf[..n] {
-                    if parser.parse_byte(b) {
-                        match parser.msgid() {
+        // Прийом даних з FC
+        if let Ok(byte) = fc_uart.read_byte() {
+            // Парсинг MAVLink V2
+            if !mav_framing {
+                if byte == 0xFD {
+                    mav_framing = true;
+                    mav_pos = 0;
+                }
+                mav_buf[mav_pos] = byte;
+                mav_pos = 1;
+            } else {
+                if mav_pos < mav_buf.len() {
+                    mav_buf[mav_pos] = byte;
+                }
+                mav_pos += 1;
+                // Повне повідомлення: заголовок (10) + payload (len) + checksum (2)
+                if mav_pos >= 12 && mav_buf[0] == 0xFD {
+                    let payload_len = mav_buf[1] as usize;
+                    if mav_pos >= payload_len + 12 {
+                        let msgid = mav_buf[5] as u32
+                            | (mav_buf[6] as u32) << 8
+                            | (mav_buf[7] as u32) << 16;
+                        match msgid {
                             0 => {} // Heartbeat
                             74 => {} // VFR_HUD
                             _ => {}
                         }
+                        mav_framing = false;
                     }
                 }
             }
         }
 
-        // Кнопка
+        // Кнопка BOOT
         if boot_btn.is_low() {
             led.set_high();
-            println!(" BOOT!");
-            // затримка через delay
-            core::hint::spin_loop();
+            let press_start = Instant::now();
+            while press_start.elapsed() < Duration::from_millis(200) {}
             led.set_low();
         }
 
-        if counter % 1000 == 0 {
+        // LED мигалка кожні 2.5с
+        if counter % 250 == 0 {
             led.toggle();
-            println!("[{}] alive", counter);
         }
 
-        delay.delay_millis(10);
-    }
-}
-
-fn init_heap() {
-    use esp_alloc::Heap;
-    const HEAP_SIZE: usize = 64 * 1024;
-    static mut HEAP: [u8; HEAP_SIZE] = [0; HEAP_SIZE];
-    unsafe {
-        Heap::init(HEAP.as_mut_ptr() as usize, HEAP_SIZE);
+        // Затримка ~10ms
+        let loop_start = Instant::now();
+        while loop_start.elapsed() < Duration::from_millis(10) {}
     }
 }
