@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-esp-hal = { version = "~1.1.0", features = ["esp32s3"] }
+esp-hal = { version = "~1.1.0", features = ["esp32s3", "println"] }
 esp-bootloader-esp-idf = { version = "0.5.0", features = ["esp32s3"] }
 critical-section = "1.2.0"
 

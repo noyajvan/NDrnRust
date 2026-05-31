@@ -110,6 +110,8 @@ fn main() -> ! {
     let mut rx = [0u8; 64];
     let mut n: u32 = 0;
 
+    println!("DropCtrlV3 started! Waiting for FC...");
+
     loop {
         n = n.wrapping_add(1);
         let now = Instant::now();
@@ -119,22 +121,28 @@ fn main() -> ! {
                 if let Some(pkt) = parser.parse(b) {
                     match pkt.msgid {
                         0 => {
-                            armed = (pkt.payload[4] & 0x80) != 0;
-                            if last_armed && !armed && !crash.emergency && crash.flying {
-                                crash.emergency = true;
-                                uart_write!(fc, &make_disarm());
-                                if crash.relay_after_land { uart_write!(fc, &make_relay()); }
+                                armed = (pkt.payload[4] & 0x80) != 0;
+                                println!("HB: armed={} mode={}", armed, (pkt.payload[5] as u32 | (pkt.payload[6] as u32)<<8));
+                                if last_armed && !armed && !crash.emergency && crash.flying {
+                                    crash.emergency = true;
+                                    println!("CRASH: DISARM!");
+                                    uart_write!(fc, &make_disarm());
+                                    if crash.relay_after_land { uart_write!(fc, &make_relay()); }
+                                }
+                                last_armed = armed;
+                                if armed { crash.flying = true; }
                             }
-                            last_armed = armed;
-                            if armed { crash.flying = true; }
-                        }
                         74 => {
                             crash.throttle = (pkt.payload[8] as u16) | (pkt.payload[9] as u16) << 8;
                             crash.groundspeed = f32::from_le_bytes(
                                 [pkt.payload[16], pkt.payload[17], pkt.payload[18], pkt.payload[19]]);
+                            println!("VFR: alt={} spd={} thr={}",
+                                f32::from_le_bytes([pkt.payload[0],pkt.payload[1],pkt.payload[2],pkt.payload[3]]),
+                                crash.groundspeed, crash.throttle);
                             if !crash.emergency && crash.flying && armed {
                                 if crash.groundspeed < 0.15 && crash.throttle > 45 {
                                     if (now - crash.stuck_timer) > Duration::from_millis(3000) {
+                                        println!("CRASH: STUCK!");
                                         crash.emergency = true;
                                         crash.failsafe = true;
                                         crash.fs_step = 0;
